@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire TV Cast</title>
+<link rel="stylesheet" href="tv.css">
+</head>
+<body>
+  <div id="idle" class="screen">
+    <div class="glow"></div>
+    <div class="idle-inner">
+      <div class="brand">
+        <svg viewBox="0 0 108 108" class="logo" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="6" d="M24,38 L24,30 Q24,26 28,26 L80,26 Q84,26 84,30 L84,74 Q84,78 80,78 L62,78"/>
+          <path fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" d="M24,50 A28,28 0 0,1 52,78"/>
+          <path fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" d="M24,62 A16,16 0 0,1 40,78"/>
+          <circle cx="24" cy="78" r="6" fill="currentColor"/>
+        </svg>
+        <span>Fire TV Cast</span>
+      </div>
+      <div id="startPanel">
+        <h1>Almost ready</h1>
+        <p class="lead">Press <b>OK</b> on your remote to go full screen and turn on sound.</p>
+        <button id="startBtn" class="start" autofocus>Start</button>
+      </div>
+      <div id="readyPanel" class="hidden">
+        <h1>Ready to cast</h1>
+        <p class="lead">On your Mac, choose <b>Mirror screen</b>, <b>Play a video file</b> or <b>Play a link</b>.</p>
+      </div>
+      <p id="status" class="status">Connecting to your Mac…</p>
+      <p id="note" class="note"></p>
+    </div>
+    <div class="footer"><span id="checks"></span><span id="version"></span></div>
+  </div>
+
+  <div id="cast" class="screen hidden">
+    <video id="video" autoplay playsinline></video>
+    <div id="spinner" class="spinner hidden"><div></div></div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <pre id="stats" class="stats hidden"></pre>
+
+  <script src="tv.js"></script>
+</body>
+</html>

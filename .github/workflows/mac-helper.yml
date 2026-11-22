@@ -1,0 +1,63 @@
+name: Build Mac helper
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: mac-helper/go.mod
+          cache-dependency-path: mac-helper/go.sum
+
+      - name: Build universal app
+        working-directory: mac-helper
+        run: |
+          set -euo pipefail
+          VERSION="1.0.${GITHUB_RUN_NUMBER}"
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o build/arm64 .
+          GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o build/amd64 .
+
+          APP="build/Fire TV Cast.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          lipo -create -output "$APP/Contents/MacOS/FireTVCast" build/arm64 build/amd64
+          sed "s/__VERSION__/${VERSION}/g" packaging/Info.plist > "$APP/Contents/Info.plist"
+
+          # App icon from the SVG logo.
+          mkdir -p build/icon.iconset
+          qlmanage -t -s 1024 -o build packaging/icon.svg >/dev/null 2>&1 || true
+          if [ -f build/icon.svg.png ]; then
+            for s in 16 32 128 256 512; do
+              sips -z $s $s build/icon.svg.png --out build/icon.iconset/icon_${s}x${s}.png >/dev/null
+              sips -z $((s*2)) $((s*2)) build/icon.svg.png --out build/icon.iconset/icon_${s}x${s}@2x.png >/dev/null
+            done
+            iconutil -c icns build/icon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
+          fi
+
+          # Ad-hoc signature (no Apple developer account needed).
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --verbose "$APP"
+          lipo -info "$APP/Contents/MacOS/FireTVCast"
+
+          cd build && ditto -c -k --keepParent "Fire TV Cast.app" ../../FireTVCast-Mac.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FireTVCast-Mac
+          path: FireTVCast-Mac.zip
+
+      - name: Publish to the "latest" release
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: FireTVCast-Mac.zip

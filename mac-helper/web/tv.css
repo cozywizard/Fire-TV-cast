@@ -1,0 +1,67 @@
+:root {
+  --bg: #0b0a1a;
+  --fg: #f5f3ff;
+  --muted: #a5a1c9;
+  --accent: #a78bfa;
+  --panel: rgba(255, 255, 255, 0.06);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: #000; color: var(--fg);
+  font-family: system-ui, -apple-system, "Roboto", "Segoe UI", sans-serif;
+}
+.hidden { display: none !important; }
+.screen { position: fixed; inset: 0; }
+
+#idle { background: var(--bg); display: flex; align-items: center; justify-content: center; }
+.glow {
+  position: absolute; inset: -20%;
+  background:
+    radial-gradient(40% 40% at 20% 30%, rgba(124, 58, 237, 0.35), transparent 70%),
+    radial-gradient(35% 35% at 80% 75%, rgba(37, 99, 235, 0.25), transparent 70%);
+}
+.idle-inner { position: relative; width: 72vw; }
+.brand { display: flex; align-items: center; gap: 1vw; font-size: 1.9vw; font-weight: 600; color: var(--accent); }
+.logo { width: 3.4vw; height: 3.4vw; }
+h1 { font-size: 4.6vw; margin: 1.6vw 0 0.6vw; letter-spacing: -0.05vw; }
+.lead { font-size: 2vw; color: var(--muted); margin: 0 0 2vw; }
+.lead b { color: var(--fg); }
+.start {
+  font-family: inherit; font-weight: 600; font-size: 2.2vw; line-height: 1;
+  padding: 1.2vw 4vw; border-radius: 1.2vw; border: 0.2vw solid var(--accent);
+  background: var(--accent); color: #1e1b4b; cursor: pointer;
+}
+.start:focus { outline: 0.35vw solid #fff; outline-offset: 0.35vw; }
+.status { font-size: 1.6vw; color: var(--muted); margin-top: 2vw; }
+.status.ok::before { content: "● "; color: #4ade80; }
+.note { font-size: 1.5vw; color: #fbbf24; min-height: 1em; }
+.footer {
+  position: absolute; left: 3vw; right: 3vw; bottom: 2vw;
+  display: flex; justify-content: space-between; font-size: 1.1vw; color: rgba(255,255,255,0.35);
+}
+
+#cast { background: #000; }
+#video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+.spinner { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.spinner div {
+  width: 5vw; height: 5vw; border-radius: 50%;
+  border: 0.45vw solid rgba(255,255,255,0.15); border-top-color: var(--accent);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast {
+  position: fixed; left: 50%; bottom: 4vw; transform: translateX(-50%);
+  background: rgba(20, 18, 40, 0.92); color: var(--fg);
+  font-size: 1.6vw; padding: 1vw 2vw; border-radius: 1vw;
+  border: 1px solid rgba(255,255,255,0.12);
+  max-width: 80vw; text-align: center;
+}
+.stats {
+  position: fixed; top: 1.6vw; left: 1.6vw; margin: 0;
+  background: rgba(0,0,0,0.7); color: #d1fae5;
+  font: 1.15vw/1.45 ui-monospace, "Roboto Mono", monospace;
+  padding: 0.8vw 1.2vw; border-radius: 0.6vw;
+}

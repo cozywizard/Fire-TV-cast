@@ -1,159 +1,105 @@
 # Fire TV Cast
 
 Free casting from your Mac to your Fire TV with no subscription.
-Mirror your screen, a window or a Chrome tab, or play a video file from your Mac on the TV.
+You can mirror your screen, a window or a Chrome tab, play a video file from your Mac, or send a video link to the TV.
 
-There are two parts:
-
-| Part | What it is | Where it runs |
-|---|---|---|
-| **Fire TV Cast app** | A small Android app that plays the stream full-screen | Your Fire TV |
-| **Sender page** | A web page the TV app hosts. You open it in Chrome. | Your Mac. There's nothing to install. |
+It works on **every Fire TV**, including the **Fire TV Stick 4K Select** (Vega OS), because
+nothing has to be installed on the TV. The TV just opens a web page in its built-in **Silk Browser**.
 
 ```
- MacBook (Chrome)                                   Fire TV 4K
-┌──────────────────────┐   1. open https://TV:8443  ┌──────────────────────────┐
-│  sender page         │ ─────────────────────────▶ │  embedded web server     │
-│  (screen / file /    │ ◀── 2. WebRTC signaling ─▶ │  + signaling relay       │
-│   link)              │                            │                          │
-│                      │ ══ 3. H.264 video + audio ═▶  full-screen player      │
-└──────────────────────┘     (peer-to-peer, LAN)    └──────────────────────────┘
+ MacBook                                             Fire TV
+┌──────────────────────────┐                        ┌──────────────────────────┐
+│ Fire TV Cast helper app  │◀── Silk opens          │  Silk Browser            │
+│  (small local server)    │    http://<mac-ip> ────│  shows the player page   │
+│                          │                        │                          │
+│ Chrome: http://localhost │══ video + audio ══════▶│  full-screen video       │
+│  (screen / file / link)  │   (WebRTC, home Wi‑Fi) │                          │
+└──────────────────────────┘                        └──────────────────────────┘
 ```
 
-Video goes straight from your Mac to the TV over your home Wi-Fi using WebRTC. Your Mac
-encodes H.264 on its hardware encoder and the Fire TV decodes it on its own hardware, so
-you get roughly 1080p at 30–60 fps with low delay. Nothing passes through the internet.
+Everything stays on your home network. Nothing goes through the internet.
 
 ---
 
-## 1. Install the app on your Fire TV (one time)
+## One-time setup (Mac)
 
-### Turn on sideloading
+1. Download **`FireTVCast-Mac.zip`** from this repository's
+   [**Releases → latest**](https://github.com/cozywizard/Fire-TV-cast/releases/tag/latest) page.
+2. Double-click the zip to unzip it, then drag **Fire TV Cast** into your **Applications** folder.
+3. Open it. Because the app isn't from the App Store, macOS blocks it the first time:
+   - **macOS 15 Sequoia or newer:** in the warning, click **Done**. Open **System Settings →
+     Privacy & Security**, scroll down to *"Fire TV Cast" was blocked*, click **Open Anyway**,
+     then enter your password. You only do this once.
+   - **macOS 14 or older:** right-click (or Control-click) the app, choose **Open**, then click **Open**.
+4. If macOS asks whether Fire TV Cast may **accept incoming network connections**, click **Allow**.
+   The TV needs this to reach your Mac.
 
-1. On the Fire TV, go to **Settings → My Fire TV → About** and click your device name
-   **7 times** until it says you're a developer.
-2. Go back to **Settings → My Fire TV → Developer options** and turn on **ADB debugging**.
-   Also turn on **Install unknown apps**. On some models this setting is called
-   **Apps from Unknown Sources**.
-3. Note your TV's IP address from **Settings → My Fire TV → About → Network**, for example `192.168.1.50`.
+You need **Google Chrome** on the Mac. Safari can't share sound or play video files to the TV.
 
-### Option A: install from your Mac (recommended)
+## Casting
 
-Open **Terminal** on your Mac and run:
+1. On the Mac, open **Fire TV Cast** from Applications. Chrome opens the Fire TV Cast page.
+   The app has no window or Dock icon. The Chrome page is the app.
+2. The page shows an address such as **`192.168.1.20`**. On your Fire TV, open the **Silk Browser**
+   app and go to that address. Bookmark it in Silk so next time it's one click.
+3. The TV says **Almost ready**. Press **OK** on the remote. That makes the page full-screen
+   and lets it play sound.
+4. On the Mac, pick one of these:
+   - **Mirror screen:** your whole screen, one window, or a Chrome tab.
+     For sound from a tab, keep *"Also share tab audio"* on. For sound from the whole screen,
+     turn on *"Also share system audio"* (macOS 14.2+).
+   - **Play a video file:** an MP4, MOV or WebM from your Mac. This gives the best quality for movies.
+   - **Play a link:** a direct video URL (`.mp4`, `.m3u8`) that the TV plays itself.
+5. To stop, click **Stop casting** on the Mac, or press **Back** on the remote.
+   When you're done for the day, click **Quit Fire TV Cast helper** at the bottom of the page.
 
-```bash
-git clone https://github.com/cozywizard/Fire-TV-cast.git
-cd Fire-TV-cast
-./mac/install-to-firetv.sh 192.168.1.50      # ← your TV's IP
-```
-
-The script installs `adb` with Homebrew if you don't have it. It then downloads the latest
-`FireTVCast.apk`, installs it and opens the app. The first time, the TV asks
-**"Allow USB debugging?"**. Tick *Always allow* and press **OK**.
-
-If the repository is private, the script can't download the APK. Download `FireTVCast.apk`
-yourself from the repository's **Releases** page, or from the latest run on the **Actions** tab
-(it's in the `FireTVCast-apk` artifact). Then run:
-`./mac/install-to-firetv.sh 192.168.1.50 ~/Downloads/FireTVCast.apk`
-
-### Option B: install from the TV with the free Downloader app
-
-This only works if the repository is public.
-
-1. On the Fire TV, search for and install **Downloader** (by AFTVnews). It's free.
-2. In **Settings → My Fire TV → Developer options → Install unknown apps**, allow **Downloader**.
-3. Open Downloader and enter:
-   `https://github.com/cozywizard/Fire-TV-cast/releases/download/latest/FireTVCast.apk`
-4. Choose **Install**.
-
-## 2. Cast
-
-1. Open **Fire TV Cast** on the TV. It's under *Apps* or *Your Apps & Channels*. The TV shows
-   an address such as `https://192.168.1.50:8443`.
-2. On your Mac, open **Google Chrome** and go to that address.
-3. The first time, Chrome says *"Your connection is not private"*. Click **Advanced →
-   Proceed to 192.168.1.50 (unsafe)**. This is expected: the TV made its own security
-   certificate. Chrome remembers your choice.
-4. If macOS asks whether Chrome may *find devices on your local network*, click **Allow**.
-5. Pick one of these:
-   - **Mirror screen**: share your whole screen, one window, or a Chrome tab.
-     - For **sound** from a tab, keep *"Also share tab audio"* on. The sound plays only on the TV.
-     - For sound when sharing the **entire screen**, turn on *"Also share system audio"*.
-       This needs macOS 14.2 or later and a recent Chrome.
-   - **Play a video file**: pick an MP4/MOV/WebM from your Mac. This gives the best quality
-     for movies, because it streams the decoded video rather than a picture of your screen.
-     Use the player on your Mac to pause and seek.
-   - **Play a link**: a direct video URL (`.mp4`, `.m3u8`…) that the TV downloads and plays
-     itself. You can pause and seek from the Mac or the remote.
-
-### Remote control
-
-| Button | Action |
-|---|---|
-| **Back** | Stop casting. On the start screen, it exits the app. |
-| **OK / Play-Pause** | Turn sound on if it was muted, or pause/play a link |
-| **⏩ / ⏪** (or right/left) | Seek ±30s / 10s when playing a link |
-| **Menu ☰** | Show stream stats (resolution, fps, bitrate, codec) |
-
-### Quality settings
-
-Open **Quality settings** on the sender page:
-
-- **Resolution:** 1080p is the default. Pick 720p if the picture stutters. 4K needs strong 5 GHz Wi-Fi.
-- **Frame rate:** 30 or 60 fps.
-- **Optimise for:** *Video & motion* keeps playback smooth. *Text & sharp detail* keeps
-  slides and code crisp.
-- **Codec:** H.264 is the default and uses hardware encoding and decoding. Try VP8 if you see glitches.
-
----
+**The first time**, the Mac page shows a line like *"TV browser: WebRTC ✓ · can decode H264, VP8"*.
+That's the TV's browser reporting what it supports. If it says **WebRTC ✗**, the TV's browser
+can't receive live video. Mirroring and video files won't work on that TV, but *Play a link* might.
 
 ## Troubleshooting
 
-- **The page won't load on the Mac:** make sure the Fire TV Cast app is open on the TV.
-  The Mac and the TV must also be on the **same Wi-Fi network**. A guest network often blocks
-  devices from talking to each other. Use the exact address the TV shows.
-- **"Can't reach the TV"** but the page loaded earlier: the app was closed on the TV. Open it again.
-  Casting resumes on its own.
-- **Choppy or blurry picture:** choose 720p, use 5 GHz Wi-Fi, or move the router closer.
-  Press **Menu** on the remote to see the bitrate. Plugging the Fire TV into Ethernet
-  helps a lot.
-- **No sound:** see the audio tips in step 5. Safari can't share audio. Use Chrome.
-- **Netflix, Disney+ or other protected video shows black:** streaming services block
-  screen capture of their videos (DRM). This tool can't get around that. Use the service's
-  own Fire TV app instead.
-- **"Couldn't connect to your Mac":** a VPN or firewall on the Mac may be blocking local
-  connections. Pause the VPN and try again.
-- **Installing an update fails with a signature error:** run
-  `adb uninstall com.firetvcast.receiver` and then install again. The install script does
-  this automatically.
+- **Silk can't open the address:** check that the Mac and the TV are on the **same Wi-Fi**.
+  A guest network usually blocks this. Check that the Fire TV Cast helper is running: open it
+  again from Applications. If you clicked "Deny" for incoming connections, go to **System
+  Settings → Network → Firewall → Options** and allow Fire TV Cast.
+- **No sound on the TV:** press **OK** on the remote. Silk won't play sound until a button has been pressed.
+- **Choppy picture:** open **Quality settings** and choose 720p. Also use 5 GHz Wi-Fi.
+  Press **Menu ☰** on the remote to see the stream's bitrate and frame rate.
+- **Mac asks whether Chrome may find devices on your local network:** click **Allow**.
+  You can also turn it on in System Settings → Privacy & Security → Local Network → Google Chrome.
+- **Netflix, Disney+ and other protected video show black:** those services block screen capture (DRM).
+- **Something else:** the helper writes a log to `~/Library/Logs/FireTVCast.log`.
 
 ## Security notes
 
-- Anyone on your home Wi-Fi who opens the address can cast to the TV while the app is open,
-  just like a Chromecast. Only the newest sender is shown.
-- The TV makes its own self-signed certificate on first launch and keeps it on the TV.
-  That's why Chrome warns once. Traffic between your Mac and the TV is encrypted (HTTPS and
-  WebRTC/DTLS) and never leaves your network.
+- Only the Mac running the helper can start a cast. Other devices on your Wi-Fi can open the
+  TV page, but they can't send video.
+- The helper only runs while you have it open. "Quit Fire TV Cast helper" stops it completely.
 
-## How it works (for the curious)
+---
 
-- `app/src/main/java/.../CastServer.kt`: an embedded [NanoHTTPD](https://github.com/NanoHttpd/nanohttpd)
-  server. It runs plain HTTP on `127.0.0.1:8080` for the TV's own WebView, and HTTPS on
-  `:8443` for your Mac. Screen capture in browsers needs a secure (HTTPS) origin.
-- `SignalingHub.kt`: passes WebRTC offers, answers and ICE candidates between the Mac and the TV.
-  Browsers hide local IPs behind random `*.local` names, so the hub rewrites them to the real
-  LAN addresses it sees. That makes connecting reliable on every Fire OS version.
-- `CertManager.kt`: generates the per-device TLS certificate with BouncyCastle.
-- `assets/web/receiver.*`: the full-screen TV player, which runs in a WebView.
-- `assets/web/index.html` + `sender.*`: the page you use on the Mac. It uses
-  `getDisplayMedia()` for mirroring, and `video.captureStream()` with Web Audio for files.
+## Optional: Android app for Fire OS devices
 
-### Building it yourself
+The `app/` folder holds an installable Fire TV app. It's for older Fire TV models that run
+**Fire OS**, such as the Fire TV Stick 4K, 4K Max or Cube. With this app the TV runs the server,
+so the Mac needs nothing but Chrome.
+**It can't be installed on the Fire TV Stick 4K Select (Vega OS).** Use the helper above instead.
 
-GitHub Actions builds the APK on every push (`.github/workflows/build.yml`). To build
-locally you need JDK 17 and the Android SDK (Android Studio installs both):
+To install it on a Fire OS device:
 
-```bash
-./gradlew assembleRelease
-# → app/build/outputs/apk/release/app-release.apk
-```
+1. On the TV, go to Settings → My Fire TV → About and click the device name 7 times.
+2. In Developer options, turn on ADB debugging.
+3. On the Mac, run `./mac/install-to-firetv.sh <tv-ip> FireTVCast.apk`. The APK is on the Releases page.
+
+## How it's built
+
+| Path | What |
+|---|---|
+| `mac-helper/main.go` | The Mac helper: a Go web server and WebSocket signaling relay. It rewrites browsers' hidden `*.local` ICE addresses into real LAN IPs so the TV can always connect. |
+| `mac-helper/web/index.html`, `sender.*` | The page you use in Chrome on the Mac (`getDisplayMedia`, `captureStream`, WebRTC). |
+| `mac-helper/web/tv.*` | The player page Silk opens on the TV. |
+| `app/` | The optional Fire OS Android app: the same idea, with the server running on the TV. |
+| `.github/workflows/` | GitHub Actions builds `FireTVCast-Mac.zip` (a universal Apple Silicon + Intel app) and the APK on every push. |
+
+To build the helper yourself (Go 1.22+): `cd mac-helper && go build -o FireTVCast . && ./FireTVCast`

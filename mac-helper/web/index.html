@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire TV Cast</title>
+<link rel="stylesheet" href="sender.css">
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 108 108" class="logo" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="7" d="M24,38 L24,30 Q24,26 28,26 L80,26 Q84,26 84,30 L84,74 Q84,78 80,78 L62,78"/>
+        <path fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" d="M24,50 A28,28 0 0,1 52,78"/>
+        <path fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" d="M24,62 A16,16 0 0,1 40,78"/>
+        <circle cx="24" cy="78" r="6" fill="currentColor"/>
+      </svg>
+      <h1>Fire TV Cast</h1>
+    </div>
+    <span id="tvStatus" class="pill"><i></i><span>Connecting…</span></span>
+  </header>
+
+  <div id="warning" class="warning hidden"></div>
+
+  <section id="tvSetup" class="setup">
+    <h2>Connect your Fire TV</h2>
+    <ol>
+      <li>On your Fire TV, open the <b>Silk Browser</b> app. You'll find it under Apps, or search for “Silk”.</li>
+      <li>Go to this address:
+        <div id="tvUrls" class="tv-urls"><span class="tv-url">Finding this Mac's address…</span></div>
+      </li>
+      <li>Press <b>OK</b> on the remote when the TV says <i>Almost ready</i>.</li>
+    </ol>
+    <p class="muted small">Tip: in Silk, open the menu and bookmark the page so next time it's one click.</p>
+  </section>
+  <p id="tvInfoLine" class="tv-info hidden"></p>
+
+  <section id="choose">
+    <h2>What do you want to cast?</h2>
+    <div class="tiles">
+      <button class="tile" id="btnScreen">
+        <span class="tile-icon">🖥️</span>
+        <span class="tile-title">Mirror screen</span>
+        <span class="tile-sub">Your whole screen, one window, or a Chrome tab</span>
+      </button>
+      <button class="tile" id="btnFile">
+        <span class="tile-icon">🎬</span>
+        <span class="tile-title">Play a video file</span>
+        <span class="tile-sub">MP4, MOV, WebM… from your Mac</span>
+      </button>
+      <button class="tile" id="btnLink">
+        <span class="tile-icon">🔗</span>
+        <span class="tile-title">Play a link</span>
+        <span class="tile-sub">A direct video URL (.mp4, .m3u8) played by the TV itself</span>
+      </button>
+    </div>
+    <input type="file" id="fileInput" accept="video/*,audio/*,.mkv,.mov,.m4v" hidden>
+
+    <form id="linkForm" class="link-form hidden">
+      <input id="linkInput" type="url" placeholder="https://example.com/video.mp4" required>
+      <button class="primary" type="submit">Play on TV</button>
+    </form>
+
+    <details class="settings" id="settings">
+      <summary>Quality settings</summary>
+      <div class="grid">
+        <label>Resolution
+          <select id="optRes">
+            <option value="720">720p – smoothest on busy Wi‑Fi</option>
+            <option value="1080" selected>1080p – recommended</option>
+            <option value="1440">1440p</option>
+            <option value="2160">4K – needs strong 5 GHz Wi‑Fi</option>
+          </select>
+        </label>
+        <label>Frame rate
+          <select id="optFps">
+            <option value="30" selected>30 fps</option>
+            <option value="60">60 fps</option>
+          </select>
+        </label>
+        <label>Optimise for
+          <select id="optHint">
+            <option value="motion" selected>Video &amp; motion</option>
+            <option value="detail">Text &amp; sharp detail</option>
+          </select>
+        </label>
+        <label>Video codec
+          <select id="optCodec">
+            <option value="h264" selected>H.264 (hardware, recommended)</option>
+            <option value="vp8">VP8</option>
+            <option value="vp9">VP9</option>
+            <option value="auto">Browser default</option>
+          </select>
+        </label>
+      </div>
+    </details>
+  </section>
+
+  <section id="casting" class="hidden">
+    <div class="casting-head">
+      <div>
+        <h2 id="castTitle">Casting</h2>
+        <p id="castState" class="muted">Starting…</p>
+      </div>
+      <button id="btnStop" class="danger">Stop casting</button>
+    </div>
+
+    <div id="filePanel" class="hidden">
+      <video id="localVideo" controls playsinline></video>
+      <label class="check"><input type="checkbox" id="optLocalSound"> Also play sound on this Mac</label>
+    </div>
+
+    <div id="linkPanel" class="hidden">
+      <div class="progress"><div id="linkBar"></div></div>
+      <div class="link-controls">
+        <button data-act="back">−10s</button>
+        <button data-act="toggle" id="linkToggle">Pause</button>
+        <button data-act="fwd">+30s</button>
+        <span id="linkTime" class="muted">0:00 / 0:00</span>
+      </div>
+    </div>
+
+    <pre id="senderStats" class="stats"></pre>
+  </section>
+
+  <details class="help">
+    <summary>Tips &amp; troubleshooting</summary>
+    <ul>
+      <li><b>Sound when mirroring:</b> when sharing a Chrome <i>tab</i>, keep “Also share tab audio” on. For the whole screen, turn on “Also share system audio” (macOS 14.2+ and a recent Chrome).</li>
+      <li><b>Best for movies:</b> use <i>Play a video file</i> – it streams the file itself rather than a picture of your screen.</li>
+      <li><b>Choppy?</b> Pick 720p, put the Mac and TV on the same 5 GHz Wi‑Fi, or move closer to the router.</li>
+      <li><b>The TV can't open the address:</b> make sure the Mac and the Fire TV are on the same Wi‑Fi (not a guest network), and that this helper is still running. If macOS asked whether Fire TV Cast may “accept incoming network connections”, it must be <i>Allow</i> (System Settings → Network → Firewall → Options).</li>
+      <li><b>Mac asks whether Chrome may “find devices on your local network”:</b> click Allow (System Settings → Privacy &amp; Security → Local Network → Google Chrome).</li>
+      <li><b>No sound on the TV:</b> press OK on the remote – the TV browser sometimes needs a button press before it will play sound.</li>
+      <li>Press <b>Back</b> on the Fire TV remote to stop. <b>Menu (☰)</b> shows stream stats on the TV.</li>
+    </ul>
+  </details>
+
+  <footer class="foot">
+    <span id="helperVersion" class="muted small"></span>
+    <button id="btnQuit" class="link-btn">Quit Fire TV Cast helper</button>
+  </footer>
+</main>
+<script src="sender.js"></script>
+</body>
+</html>
