@@ -40,8 +40,9 @@ You need **Google Chrome** on the Mac. Safari can't share sound or play video fi
 
 1. On the Mac, open **Fire TV Cast** from Applications. Chrome opens the Fire TV Cast page.
    The app has no window or Dock icon. The Chrome page is the app.
-2. The page shows an address such as **`192.168.1.20`**. On your Fire TV, open the **Silk Browser**
-   app and go to that address. Bookmark it in Silk so next time it's one click.
+2. The page shows an address such as **`http://192.168.1.20`**. On your Fire TV, open the **Silk Browser**
+   app and type that address **including `http://`**. Without it, Silk runs a web search instead.
+   Bookmark the page in Silk so next time it's one click.
 3. The TV says **Almost ready**. Press **OK** on the remote. That makes the page full-screen
    and lets it play sound.
 4. On the Mac, pick one of these:

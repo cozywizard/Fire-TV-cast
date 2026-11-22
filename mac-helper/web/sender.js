@@ -553,7 +553,7 @@
       (info.ips || []).forEach((ip, i) => {
         const el = document.createElement('span');
         el.className = 'tv-url' + (i ? ' secondary' : '');
-        el.textContent = ip + (info.port === 80 ? '' : ':' + info.port);
+        el.textContent = 'http://' + ip + (info.port === 80 ? '' : ':' + info.port);
         box.appendChild(el);
       });
       $('#helperVersion').textContent = 'Helper v' + info.version;
