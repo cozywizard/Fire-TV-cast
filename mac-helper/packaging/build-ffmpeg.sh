@@ -37,7 +37,7 @@ for ARCH in arm64 x86_64; do
   ./configure \
     --arch="$ARCH" --target-os=darwin --cc="clang -arch $ARCH" \
     --extra-cflags="-mmacosx-version-min=11.0" --extra-ldflags="-arch $ARCH -mmacosx-version-min=11.0" \
-    "${EXTRA[@]}" \
+    ${EXTRA[@]+"${EXTRA[@]}"} \
     --disable-everything --disable-autodetect --disable-doc --disable-debug --disable-network \
     --disable-ffplay --enable-ffmpeg --enable-ffprobe \
     --enable-videotoolbox --enable-zlib \
