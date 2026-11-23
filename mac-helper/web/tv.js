@@ -17,6 +17,8 @@
   var toastTimer = null;
   var replaced = false;
   var started = false;
+  var audioCtx = null;   // unlocked by the Start button press
+  var audioSrc = null;   // cast audio routed through audioCtx
   var hostName = '';
 
   // ---------- Signaling ----------
@@ -95,7 +97,7 @@
         video.srcObject = stream;
       }
       mode = 'stream';
-      playVideo();
+      playStream();
     };
     conn.onicecandidate = function (e) {
       if (e.candidate && conn === pc) {
@@ -215,18 +217,102 @@
 
   // ---------- Screens ----------
 
+  // Links play their own sound through the <video> element.
   function playVideo() {
     video.muted = false;
     var p = video.play();
     if (p && p.catch) {
       p.then(function () { $('#spinner').classList.add('hidden'); }).catch(function () {
-        // Autoplay with sound was blocked; play muted and let the remote unmute.
+        // Autoplay with sound was blocked; play muted and ask for a button press.
         video.muted = true;
         video.play().catch(function () {});
-        toast('Press OK on your remote to turn on sound', 6000);
+        showSoundPrompt();
       });
     }
   }
+
+  // Casts: the <video> always plays muted (browsers never block that) and the sound goes
+  // through the Web Audio context that was unlocked when Start was pressed. TV browsers
+  // often won't pass remote buttons to the page while video plays, so we can't rely on
+  // a second button press to unmute.
+  function playStream() {
+    video.muted = true;
+    var p = video.play();
+    if (p && p.catch) p.catch(function () {});
+    routeStreamAudio();
+  }
+
+  function routeStreamAudio() {
+    var stream = video.srcObject;
+    if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length) return;
+    if (!audioCtx) { showSoundPrompt(); return; }
+    if (audioCtx.state !== 'running') {
+      var r = audioCtx.resume && audioCtx.resume();
+      if (r && r.then) {
+        r.then(function () {
+          if (audioCtx.state === 'running' && mode === 'stream') routeStreamAudio();
+          else showSoundPrompt();
+        }).catch(showSoundPrompt);
+      } else {
+        showSoundPrompt();
+      }
+      return;
+    }
+    disconnectAudio();
+    try {
+      audioSrc = audioCtx.createMediaStreamSource(stream);
+      audioSrc.connect(audioCtx.destination);
+      hideSoundPrompt();
+    } catch (e) {
+      console.warn('web audio routing failed, falling back to the video element', e);
+      video.muted = false;
+      var p = video.play();
+      if (p && p.catch) p.catch(function () { video.muted = true; video.play().catch(function () {}); showSoundPrompt(); });
+    }
+  }
+
+  function disconnectAudio() {
+    if (audioSrc) { try { audioSrc.disconnect(); } catch (e) {} audioSrc = null; }
+  }
+
+  function ensureAudioCtx() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!audioCtx && AC) audioCtx = new AC();
+      if (audioCtx && audioCtx.resume) { var r = audioCtx.resume(); if (r && r.catch) r.catch(function () {}); }
+    } catch (e) {}
+  }
+
+  var soundPromptVisible = false;
+  function showSoundPrompt() {
+    if (mode === 'idle') return;
+    soundPromptVisible = true;
+    var b = $('#soundBtn');
+    b.classList.remove('hidden');
+    try { b.focus(); } catch (e) {}
+  }
+  function hideSoundPrompt() {
+    soundPromptVisible = false;
+    $('#soundBtn').classList.add('hidden');
+  }
+
+  // Called from any button press / click while the sound prompt is showing.
+  function unlockSound() {
+    ensureAudioCtx();
+    hideSoundPrompt();
+    if (mode === 'stream') {
+      routeStreamAudio();
+    } else if (mode === 'url') {
+      video.muted = false;
+      var p = video.play();
+      if (p && p.catch) p.catch(function () {});
+    }
+    toast('Sound on', 1500);
+  }
+  $('#soundBtn').addEventListener('click', function (e) { e.stopPropagation(); unlockSound(); });
+  ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach(function (t) {
+    document.addEventListener(t, function () { if (soundPromptVisible) unlockSound(); }, true);
+  });
   video.addEventListener('playing', function () { $('#spinner').classList.add('hidden'); });
   video.addEventListener('waiting', function () { if (mode === 'url') $('#spinner').classList.remove('hidden'); });
 
@@ -237,6 +323,8 @@
   }
 
   function stopAll() {
+    disconnectAudio();
+    hideSoundPrompt();
     closePc();
     stopUrl();
     video.srcObject = null;
@@ -273,7 +361,7 @@
         if (!started) { start(); return true; }
         // falls through
       case 'playpause':
-        if (video.muted && mode !== 'idle') { video.muted = false; toast('Sound on'); return true; }
+        if (soundPromptVisible) { unlockSound(); return true; }
         if (mode === 'url') control({ action: 'toggle' });
         return true;
       case 'forward':
@@ -288,6 +376,8 @@
 
   // Keyboard fallback when testing in a desktop browser.
   document.addEventListener('keydown', function (e) {
+    // Any button at all turns the sound on if we're waiting for one.
+    if (soundPromptVisible && e.key !== 'Escape' && e.key !== 'GoBack' && e.key !== 'BrowserBack') { unlockSound(); e.preventDefault(); return; }
     var map = { Escape: 'back', Enter: 'ok', ' ': 'playpause', MediaPlayPause: 'playpause', MediaFastForward: 'forward', MediaRewind: 'rewind', ArrowRight: 'forward', ArrowLeft: 'rewind', i: 'menu', ContextMenu: 'menu' };
     if (e.key === 'Enter' && !started) { start(); e.preventDefault(); return; }
     if (map[e.key]) { window.remoteKey(map[e.key]); e.preventDefault(); }
@@ -387,10 +477,7 @@
       var fs = el.requestFullscreen || el.webkitRequestFullscreen;
       if (fs) { var p = fs.call(el); if (p && p.catch) p.catch(function () {}); }
     } catch (e) {}
-    try {
-      var AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) { var ctx = new AC(); if (ctx.resume) ctx.resume(); }
-    } catch (e) {}
+    ensureAudioCtx();
     $('#startPanel').classList.add('hidden');
     $('#readyPanel').classList.remove('hidden');
     send(tvInfo());

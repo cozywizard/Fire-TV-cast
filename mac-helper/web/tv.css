@@ -65,3 +65,12 @@ h1 { font-size: 4.6vw; margin: 1.6vw 0 0.6vw; letter-spacing: -0.05vw; }
   font: 1.15vw/1.45 ui-monospace, "Roboto Mono", monospace;
   padding: 0.8vw 1.2vw; border-radius: 0.6vw;
 }
+
+.sound-btn {
+  position: absolute; left: 50%; bottom: 6vw; transform: translateX(-50%);
+  font-family: inherit; font-weight: 600; font-size: 2vw; line-height: 1;
+  padding: 1.3vw 3vw; border-radius: 1.2vw; border: 0;
+  background: var(--accent); color: #1e1b4b; cursor: pointer;
+  box-shadow: 0 1vw 3vw rgba(0,0,0,0.6);
+}
+.sound-btn:focus { outline: 0.35vw solid #fff; outline-offset: 0.35vw; }
