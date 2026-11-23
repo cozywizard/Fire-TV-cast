@@ -155,6 +155,15 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	local := isLoopback(remoteIP(r))
 
+	if strings.HasPrefix(r.URL.Path, "/api/media/") || strings.HasPrefix(r.URL.Path, "/media/") {
+		if !local {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		serveMediaAPI(w, r)
+		return
+	}
+
 	switch r.URL.Path {
 	case "/ws":
 		s.serveWS(w, r, local)
@@ -162,14 +171,15 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/info":
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"app":         appSignature,
-			"version":     version,
-			"ips":         lanIPv4(),
-			"port":        s.port,
-			"tvConnected": s.hub.hasReceiver(),
-			"hostname":    hostname(),
-			"update":      upd.snapshot(),
-			"soundCheck":  lastSoundCheck(),
+			"app":          appSignature,
+			"version":      version,
+			"ips":          lanIPv4(),
+			"port":         s.port,
+			"tvConnected":  s.hub.hasReceiver(),
+			"hostname":     hostname(),
+			"update":       upd.snapshot(),
+			"soundCheck":   lastSoundCheck(),
+			"nativePicker": nativePickerAvailable(),
 		})
 		return
 	case "/api/update/check":

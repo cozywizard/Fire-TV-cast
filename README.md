@@ -49,7 +49,10 @@ You need **Google Chrome** on the Mac. Safari can't share sound or play video fi
    - **Mirror screen:** your whole screen, one window, or a Chrome tab.
      For sound from a tab, keep *"Also share tab audio"* on. For sound from the whole screen,
      turn on *"Also share system audio"* (macOS 14.2+).
-   - **Play a video file:** an MP4, MOV or WebM from your Mac. This gives the best quality for movies.
+   - **Play a video file:** a window opens for you to choose a video. MP4, MKV, MOV and AVI files
+     all work, and this gives the best quality for movies. MKV files with Dolby Digital (AC3), DTS
+     or TrueHD sound, and older formats, are converted on the fly, so they play with sound. A seek
+     bar lets you jump around.
    - **Play a link:** a direct video URL (`.mp4`, `.m3u8`) that the TV plays itself.
 5. To stop, click **Stop casting** on the Mac, or press **Back** on the remote.
    When you're done for the day, click **Quit Fire TV Cast helper** at the bottom of the page.
@@ -86,6 +89,20 @@ Privacy & Security → App Management**, turn on **Fire TV Cast**, and click **T
   You can also turn it on in System Settings → Privacy & Security → Local Network → Google Chrome.
 - **Netflix, Disney+ and other protected video show black:** those services block screen capture (DRM).
 - **Something else:** the helper writes a log to `~/Library/Logs/FireTVCast.log`.
+
+## About video file conversion
+
+The app includes [FFmpeg](https://ffmpeg.org), built from its official source code by
+`mac-helper/packaging/build-ffmpeg.sh` under the LGPL. When a file has a picture or sound format
+Chrome can't play, the app converts it while it plays:
+
+- **H.264 or HEVC pictures** are passed through untouched, so the quality is the same and the Mac
+  barely works.
+- **Other picture formats** (such as Xvid/DivX in old AVIs) are converted to H.264 with the Mac's
+  hardware encoder.
+- **Surround sound Chrome can't play** (AC3, E-AC3, DTS, TrueHD) becomes stereo AAC.
+
+Subtitles inside the file aren't shown yet.
 
 ## Security notes
 

@@ -18,6 +18,21 @@ jobs:
           go-version-file: mac-helper/go.mod
           cache-dependency-path: mac-helper/go.sum
 
+      - name: Cache FFmpeg
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: mac-helper/build/ffmpeg
+          key: ffmpeg-${{ hashFiles('mac-helper/packaging/build-ffmpeg.sh') }}
+
+      - name: Build FFmpeg (only when the build script changes)
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: mac-helper/packaging/build-ffmpeg.sh mac-helper/build/ffmpeg
+
+      - name: Test
+        working-directory: mac-helper
+        run: go test ./...
+
       - name: Build universal app
         working-directory: mac-helper
         run: |
@@ -31,6 +46,12 @@ jobs:
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           lipo -create -output "$APP/Contents/MacOS/FireTVCast" build/arm64 build/amd64
           sed "s/__VERSION__/${VERSION}/g" packaging/Info.plist > "$APP/Contents/Info.plist"
+
+          # Bundled FFmpeg for converting MKV and other files.
+          cp build/ffmpeg/ffmpeg build/ffmpeg/ffprobe "$APP/Contents/MacOS/"
+          cp build/ffmpeg/FFMPEG-LICENSE.txt build/ffmpeg/FFMPEG-SOURCE.txt "$APP/Contents/Resources/"
+          codesign --force --sign - "$APP/Contents/MacOS/ffmpeg"
+          codesign --force --sign - "$APP/Contents/MacOS/ffprobe"
 
           # App icon from the SVG logo.
           mkdir -p build/icon.iconset
@@ -48,8 +69,21 @@ jobs:
           codesign --verify --verbose "$APP"
           lipo -info "$APP/Contents/MacOS/FireTVCast"
 
-          # Sanity check: the app reports the version we just built.
+          # Sanity checks: the app reports the version we just built, and the bundled
+          # FFmpeg can actually convert an AC3 MKV.
           test "$("$APP/Contents/MacOS/FireTVCast" -version)" = "$VERSION"
+          FF="$APP/Contents/MacOS/ffmpeg"
+          "$FF" -version | head -1
+          "$APP/Contents/MacOS/ffprobe" -version | head -1
+          PROBE="$APP/Contents/MacOS/ffprobe"
+          FRAG="frag_keyframe+empty_moov+default_base_moof"
+          # MKV with AC3 5.1 sound -> copied H.264 + stereo AAC
+          "$FF" -v error -i testdata/sample-ac3.mkv -map 0:0 -map 0:1 -c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000 -movflags $FRAG -f mp4 build/t1.mp4
+          test "$("$PROBE" -v error -show_entries stream=codec_name -of csv=p=0 build/t1.mp4 | tr '\n' ' ')" = "h264 aac "
+          # Old AVI (MPEG-4 video, MP3 sound) -> H.264 via VideoToolbox + AAC
+          "$FF" -v error -i testdata/sample-mpeg4.avi -map 0:0 -map 0:1 -c:v h264_videotoolbox -realtime 1 -allow_sw 1 -b:v 2M -pix_fmt yuv420p -c:a aac -ac 2 -movflags $FRAG -f mp4 build/t2.mp4
+          test "$("$PROBE" -v error -show_entries stream=codec_name -of csv=p=0 build/t2.mp4 | tr '\n' ' ')" = "h264 aac "
+          echo "FFmpeg conversion checks passed"
 
           cd build && ditto -c -k --keepParent "Fire TV Cast.app" ../../FireTVCast-Mac.zip
           # Files used by the app's automatic updater.

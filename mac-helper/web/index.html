@@ -51,7 +51,7 @@
       <button class="tile" id="btnFile">
         <span class="tile-icon">🎬</span>
         <span class="tile-title">Play a video file</span>
-        <span class="tile-sub">MP4, MOV, WebM… from your Mac</span>
+        <span class="tile-sub">MP4, MKV, MOV, AVI… from your Mac</span>
       </button>
       <button class="tile" id="btnLink">
         <span class="tile-icon">🔗</span>
@@ -59,7 +59,7 @@
         <span class="tile-sub">A direct video URL (.mp4, .m3u8) played by the TV itself</span>
       </button>
     </div>
-    <input type="file" id="fileInput" accept="video/*,audio/*,.mkv,.mov,.m4v" hidden>
+    <input type="file" id="fileInput" accept="video/*,audio/*,.mkv,.mov,.m4v,.avi" hidden>
 
     <form id="linkForm" class="link-form hidden">
       <input id="linkInput" type="url" placeholder="https://example.com/video.mp4" required>
@@ -112,6 +112,16 @@
 
     <div id="filePanel" class="hidden">
       <video id="localVideo" controls playsinline></video>
+      <div id="convControls" class="conv hidden">
+        <input type="range" id="convSeek" min="0" max="1000" value="0" aria-label="Position">
+        <div class="link-controls">
+          <button data-c="back">−10s</button>
+          <button data-c="toggle" id="convToggle">Pause</button>
+          <button data-c="fwd">+30s</button>
+          <span id="convTime" class="muted">0:00</span>
+        </div>
+        <p id="convNote" class="muted small"></p>
+      </div>
       <label class="check"><input type="checkbox" id="optLocalSound"> Also play sound on this Mac</label>
     </div>
 
@@ -143,7 +153,7 @@
     <summary>Tips &amp; troubleshooting</summary>
     <ul>
       <li><b>Sound when mirroring:</b> when sharing a Chrome <i>tab</i>, keep “Also share tab audio” on. For the whole screen, turn on “Also share system audio” (macOS 14.2+ and a recent Chrome).</li>
-      <li><b>Best for movies:</b> use <i>Play a video file</i> – it streams the file itself rather than a picture of your screen.</li>
+      <li><b>Best for movies:</b> use <i>Play a video file</i> – it streams the file itself rather than a picture of your screen. MKV and other formats are converted automatically.</li>
       <li><b>Choppy?</b> Pick 720p, put the Mac and TV on the same 5 GHz Wi‑Fi, or move closer to the router.</li>
       <li><b>The TV can't open the address:</b> make sure the Mac and the Fire TV are on the same Wi‑Fi (not a guest network), and that this helper is still running. If macOS asked whether Fire TV Cast may “accept incoming network connections”, it must be <i>Allow</i> (System Settings → Network → Firewall → Options).</li>
       <li><b>Mac asks whether Chrome may “find devices on your local network”:</b> click Allow (System Settings → Privacy &amp; Security → Local Network → Google Chrome).</li>

@@ -134,3 +134,7 @@ select {
 
 .soundcheck-row { margin: -8px 0 20px; }
 .soundcheck-row .stats { margin-top: 8px; }
+
+.conv { margin-top: 12px; }
+.conv input[type=range] { width: 100%; accent-color: var(--accent); margin: 4px 0 10px; }
+.conv p { margin: 8px 0 0; }

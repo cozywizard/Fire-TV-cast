@@ -210,14 +210,54 @@
     return s === 'browser' ? 'a tab' : s === 'window' ? 'a window' : 'your screen';
   }
 
-  async function startFile(file) {
+  // ---------- Video files ----------
+
+  let helperInfo = {};
+
+  // Browser file picker (fallback when the helper can't show its own picker).
+  function startFile(file) {
     if (!file) return;
+    const url = URL.createObjectURL(file);
+    startPlayback({ src: url, name: file.name, cleanup: [() => URL.revokeObjectURL(url)] });
+  }
+
+  // A file opened by the helper: played directly, or converted on the fly.
+  function startMedia(m) {
+    const converted = m.mode === 'convert' ? m : null;
+    startPlayback({ src: converted ? `${m.url}?start=0` : m.url, name: m.name, converted, hasAudio: m.hasAudio });
+  }
+
+  async function pickFile() {
+    hideWarning();
+    if (!helperInfo.nativePicker) {
+      $('#fileInput').value = '';
+      $('#fileInput').click();
+      return;
+    }
+    showWarning('Choose a video in the window that just opened. If you can’t see it, it may be behind Chrome.', true);
+    let res;
+    try {
+      res = await (await fetch('/api/media/pick', { method: 'POST' })).json();
+    } catch (e) {
+      res = { error: 'The Fire TV Cast helper isn’t responding.', fallback: true };
+    }
+    hideWarning();
+    if (res.cancelled) return;
+    if (res.error) {
+      if (res.fallback) { $('#fileInput').value = ''; $('#fileInput').click(); return; }
+      showWarning(res.error);
+      return;
+    }
+    startMedia(res);
+  }
+
+  async function startPlayback({ src, name, converted = null, hasAudio = null, cleanup: extraCleanup = [] }) {
     // A fresh <video> each time: createMediaElementSource can only be used once per element.
     const old = $('#localVideo');
     const v = old.cloneNode(false);
     old.replaceWith(v);
-    const url = URL.createObjectURL(file);
-    v.src = url;
+    v.controls = !converted;
+    v.src = src;
 
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const source = ctx.createMediaElementSource(v);
@@ -227,12 +267,15 @@
     localGain.gain.value = $('#optLocalSound').checked ? 1 : 0;
     source.connect(localGain).connect(ctx.destination);
 
-    const cleanup = [() => { v.pause(); v.removeAttribute('src'); v.load(); }, () => URL.revokeObjectURL(url), () => ctx.close()];
+    const cleanup = [() => { v.pause(); v.removeAttribute('src'); v.load(); }, () => ctx.close(), ...extraCleanup];
 
+    if (converted) showWarning(`Preparing ${name}: ${converted.note}…`, true);
     try {
       await new Promise((resolve, reject) => {
         v.addEventListener('loadedmetadata', resolve, { once: true });
-        v.addEventListener('error', () => reject(new Error('Chrome can’t play this file. Try an MP4 (H.264/HEVC + AAC) or WebM file.')), { once: true });
+        v.addEventListener('error', () => reject(new Error(converted
+          ? 'Fire TV Cast couldn’t convert this file.'
+          : 'Chrome can’t play this file. Try an MP4 (H.264/HEVC + AAC) or WebM file.')), { once: true });
       });
       await ctx.resume();
       await v.play();
@@ -241,6 +284,7 @@
       showWarning(e.message || String(e));
       return;
     }
+    hideWarning();
 
     const captured = (v.captureStream || v.mozCaptureStream).call(v);
     let videoTrack = captured.getVideoTracks()[0];
@@ -252,12 +296,82 @@
     const stream = new MediaStream(tracks);
     cleanup.push(() => captured.getTracks().forEach((t) => t.stop()));
 
+    // When a converted file is seeked, Chrome loads a new stream and swaps in a new video
+    // track; hand the new track to the connection without renegotiating.
+    captured.addEventListener('addtrack', (e) => {
+      if (!session || session.video !== v || e.track.kind !== 'video') return;
+      const prev = session.stream.getVideoTracks()[0];
+      if (prev === e.track) return;
+      if (prev) session.stream.removeTrack(prev);
+      session.stream.addTrack(e.track);
+      const tr = pc && pc.getTransceivers().find((t) => t.receiver.track && t.receiver.track.kind === 'video');
+      if (tr) tr.sender.replaceTrack(e.track).catch((err) => console.warn('replaceTrack', err));
+    });
+
     beginSession({
-      kind: 'file', stream, title: 'Playing ' + file.name, cleanup, video: v,
+      kind: 'file', stream, title: 'Playing ' + name, cleanup, video: v, converted,
       setLocalSound: (on) => { localGain.gain.value = on ? 1 : 0; },
     });
+    if (converted) setupConvertedControls(v, converted);
     v.addEventListener('ended', () => setCastState('Finished. Press play to watch again, or stop casting.'));
+
+    // Warn when Chrome silently drops a sound format it can't play (e.g. AC3/DTS in MKV).
+    if (!converted) {
+      setTimeout(() => {
+        if (!session || session.video !== v || v.paused) return;
+        if ('webkitAudioDecodedByteCount' in v && v.webkitAudioDecodedByteCount === 0 && hasAudio !== false) {
+          showWarning('This video is playing without sound: Chrome can’t play its sound format (MKV files often use AC3 or DTS surround sound). ' +
+            (helperInfo.nativePicker ? 'Stop casting and choose the file again with “Play a video file” so Fire TV Cast can convert it.' : 'Convert it to MP4 first, e.g. with HandBrake.'));
+        }
+      }, 3000);
+    }
   }
+
+  // Seek bar and buttons for converted files (the stream restarts at the chosen time).
+  function setupConvertedControls(v, m) {
+    const panel = $('#convControls');
+    panel.classList.remove('hidden');
+    $('#convNote').textContent = 'Converted on the fly: ' + m.note + '.';
+    let offset = 0;
+    const duration = m.duration || 0;
+    const pos = () => offset + (v.currentTime || 0);
+    const fmt = (t) => {
+      t = Math.max(0, Math.floor(t || 0));
+      const h = Math.floor(t / 3600), mm = Math.floor((t % 3600) / 60), ss = String(t % 60).padStart(2, '0');
+      return h ? `${h}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
+    };
+    let dragging = false;
+    const update = () => {
+      if (!session || session.video !== v) { clearInterval(timer); return; }
+      $('#convTime').textContent = `${fmt(pos())} / ${duration ? fmt(duration) : '?'}`;
+      if (!dragging && duration) $('#convSeek').value = String(Math.round((1000 * pos()) / duration));
+      $('#convToggle').textContent = v.paused ? 'Play' : 'Pause';
+    };
+    const timer = setInterval(update, 500);
+    const seekTo = (t) => {
+      t = Math.max(0, duration ? Math.min(t, duration - 2) : t);
+      offset = t;
+      v.src = `${m.url}?start=${t.toFixed(1)}`;
+      v.play().catch(() => {});
+      setCastState('Seeking…');
+      v.addEventListener('playing', () => setCastState('● Live on your TV'), { once: true });
+      update();
+    };
+    session.cleanup.push(() => { clearInterval(timer); panel.classList.add('hidden'); });
+    panel.onclick = (e) => {
+      const c = e.target.dataset && e.target.dataset.c;
+      if (c === 'toggle') { if (v.paused) v.play(); else v.pause(); }
+      if (c === 'back') seekTo(pos() - 10);
+      if (c === 'fwd') seekTo(pos() + 30);
+      update();
+    };
+    const slider = $('#convSeek');
+    slider.oninput = () => { dragging = true; $('#convTime').textContent = `${fmt((slider.value / 1000) * duration)} / ${fmt(duration)}`; };
+    slider.onchange = () => { dragging = false; if (duration) seekTo((slider.value / 1000) * duration); };
+    update();
+  }
+
+  window.ftvCast = { startMedia }; // used by automated tests
 
   function startLink(url) {
     beginSession({ kind: 'link', url, title: 'Playing a link on the TV' });
@@ -549,7 +663,7 @@
   function hideWarning() { $('#warning').classList.add('hidden'); }
 
   $('#btnScreen').addEventListener('click', () => { hideWarning(); startScreen(); });
-  $('#btnFile').addEventListener('click', () => { hideWarning(); $('#fileInput').value = ''; $('#fileInput').click(); });
+  $('#btnFile').addEventListener('click', pickFile);
   $('#fileInput').addEventListener('change', (e) => startFile(e.target.files[0]));
   $('#btnLink').addEventListener('click', () => {
     hideWarning();
@@ -624,6 +738,7 @@
         el.textContent = 'http://' + ip + (info.port === 80 ? '' : ':' + info.port);
         box.appendChild(el);
       });
+      helperInfo = info;
       $('#helperVersion').textContent = 'Helper v' + info.version;
       showUpdate(info.update);
     } catch (e) { /* helper not reachable; the pill says so */ }
