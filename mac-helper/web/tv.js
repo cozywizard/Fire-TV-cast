@@ -88,6 +88,7 @@
       case 'play-url': return playUrl(msg.url);
       case 'control': return control(msg);
       case 'test-tone': return testTone();
+      case 'soundcheck': location.href = '/soundcheck'; return;
       case 'audio-method': return setAudioMethod(msg.method);
       case 'replaced':
         // Another copy of this page took over; don't fight it.

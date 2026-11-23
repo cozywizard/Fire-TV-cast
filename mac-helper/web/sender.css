@@ -131,3 +131,6 @@ select {
 }
 .update.update-ready { border-color: var(--accent); color: var(--fg); background: var(--accent-soft); }
 .update .primary { padding: 8px 14px; font-size: 14px; }
+
+.soundcheck-row { margin: -8px 0 20px; }
+.soundcheck-row .stats { margin-top: 8px; }

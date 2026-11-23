@@ -17,6 +17,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -168,6 +169,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"tvConnected": s.hub.hasReceiver(),
 			"hostname":    hostname(),
 			"update":      upd.snapshot(),
+			"soundCheck":  lastSoundCheck(),
 		})
 		return
 	case "/api/update/check":
@@ -204,6 +206,31 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "/tv":
 		serveEmbedded(w, "web/tv.html")
+		return
+	case "/soundcheck":
+		serveEmbedded(w, "web/soundcheck.html")
+		return
+	case "/beep.wav":
+		freq, _ := strconv.Atoi(r.URL.Query().Get("f"))
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Write(beepWAV(freq))
+		return
+	case "/api/tvlog":
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		b, _ := io.ReadAll(io.LimitReader(r.Body, 16<<10))
+		var rep struct {
+			UA      string   `json:"ua"`
+			Results []string `json:"results"`
+		}
+		json.Unmarshal(b, &rep)
+		log.Printf("TV sound check (%s):\n%s", rep.UA, strings.Join(rep.Results, "\n"))
+		soundCheckMu.Lock()
+		soundCheck = map[string]any{"at": time.Now().Format("15:04:05"), "results": rep.Results}
+		soundCheckMu.Unlock()
+		io.WriteString(w, "ok")
 		return
 	}
 	s.files.ServeHTTP(w, r)
@@ -249,6 +276,52 @@ func (h *hub) hasSender() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.sender != nil
+}
+
+var (
+	soundCheckMu sync.Mutex
+	soundCheck   map[string]any
+)
+
+func lastSoundCheck() map[string]any {
+	soundCheckMu.Lock()
+	defer soundCheckMu.Unlock()
+	return soundCheck
+}
+
+// beepWAV returns a 1-second 16-bit mono sine tone as a WAV file.
+func beepWAV(freq int) []byte {
+	if freq < 100 || freq > 4000 {
+		freq = 440
+	}
+	const rate = 44100
+	n := rate
+	buf := make([]byte, 44+n*2)
+	le16 := func(o int, v uint16) { buf[o], buf[o+1] = byte(v), byte(v>>8) }
+	le32 := func(o int, v uint32) { le16(o, uint16(v)); le16(o+2, uint16(v>>16)) }
+	copy(buf, "RIFF")
+	le32(4, uint32(36+n*2))
+	copy(buf[8:], "WAVEfmt ")
+	le32(16, 16)
+	le16(20, 1)
+	le16(22, 1)
+	le32(24, rate)
+	le32(28, rate*2)
+	le16(32, 2)
+	le16(34, 16)
+	copy(buf[36:], "data")
+	le32(40, uint32(n*2))
+	for i := 0; i < n; i++ {
+		env := 1.0
+		if i < 2000 {
+			env = float64(i) / 2000
+		} else if i > n-2000 {
+			env = float64(n-i) / 2000
+		}
+		v := int16(12000 * env * math.Sin(2*math.Pi*float64(freq)*float64(i)/rate))
+		le16(44+i*2, uint16(v))
+	}
+	return buf
 }
 
 func serveEmbedded(w http.ResponseWriter, name string) {

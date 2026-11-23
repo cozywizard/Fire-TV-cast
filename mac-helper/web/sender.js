@@ -561,6 +561,27 @@
     const url = $('#linkInput').value.trim();
     if (url) startLink(url);
   });
+  let soundCheckBaseline = null, soundCheckTimer = null;
+  $('#btnSoundCheck').addEventListener('click', async () => {
+    if (!tvReady) { showWarning('Open the TV page in Silk first, then run the sound check.'); return; }
+    try { soundCheckBaseline = ((await (await fetch('/api/info', { cache: 'no-store' })).json()).soundCheck || {}).at || null; } catch {}
+    send({ type: 'soundcheck' });
+    const el = $('#soundCheckLog');
+    el.classList.remove('hidden');
+    el.textContent = 'The sound check is now open on the TV. Press the middle button on the remote to start it, and note which numbered sounds you hear. The results will appear here.';
+    clearInterval(soundCheckTimer);
+    soundCheckTimer = setInterval(async () => {
+      try {
+        const sc = (await (await fetch('/api/info', { cache: 'no-store' })).json()).soundCheck;
+        if (sc && sc.at !== soundCheckBaseline) {
+          soundCheckBaseline = sc.at;
+          el.textContent = `TV sound check results (${sc.at}):\n` + (sc.results || []).join('\n') +
+            '\n\nTell Claude which numbers you heard, and copy this text too.';
+        }
+      } catch {}
+    }, 2000);
+  });
+
   $('#btnTone').addEventListener('click', () => {
     $('#toneResult').textContent = 'Sending…';
     send({ type: 'test-tone' });
