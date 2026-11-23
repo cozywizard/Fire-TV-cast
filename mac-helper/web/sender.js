@@ -25,7 +25,7 @@
 
   // ---------- Settings ----------
 
-  const settingIds = ['optRes', 'optFps', 'optHint', 'optCodec', 'optLocalSound'];
+  const settingIds = ['optRes', 'optFps', 'optHint', 'optCodec', 'optLocalSound', 'optAudioMethod'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem('ftvcast-settings') || '{}');
@@ -58,7 +58,8 @@
   for (const id of settingIds) {
     document.getElementById(id).addEventListener('change', () => {
       saveSettings();
-      if (id === 'optLocalSound' && session && session.setLocalSound) session.setLocalSound($('#optLocalSound').checked);
+      if (id === 'optAudioMethod') sendAudioMethod();
+      else if (id === 'optLocalSound' && session && session.setLocalSound) session.setLocalSound($('#optLocalSound').checked);
       else if (pc) applyEncoding().catch(() => {});
     });
   }
@@ -100,6 +101,7 @@
       case 'receiver-ready':
         tvReady = msg.type === 'receiver-ready' || !!msg.receiverReady;
         updatePill();
+        if (tvReady) sendAudioMethod();
         if (tvReady && session) await resume();
         break;
       case 'receiver-left':
@@ -110,6 +112,14 @@
           closePc();
           setCastState('The TV page was closed – open it again in Silk on the TV to continue.');
         }
+        break;
+      case 'tv-audio':
+        showTvAudio(msg);
+        break;
+      case 'tv-tone':
+        $('#toneResult').textContent = msg.webaudio
+          ? 'Tone sent – did you hear a beep on the TV?'
+          : `The TV page couldn't play a tone (audio engine: ${msg.ctx}). Press the middle button on the remote and try again.`;
         break;
       case 'tv-info':
         tvCaps = msg;
@@ -257,6 +267,9 @@
     $('#filePanel').classList.toggle('hidden', s.kind !== 'file');
     $('#linkPanel').classList.toggle('hidden', s.kind !== 'link');
     $('#senderStats').textContent = '';
+    $('#tvAudio').textContent = 'TV sound: checking…';
+    $('#toneResult').textContent = '';
+    document.querySelector('.tv-sound').classList.toggle('hidden', s.kind === 'link');
     if (tvReady) resume();
     else setCastState('Waiting for the TV… open the address shown above in Silk on your Fire TV.');
   }
@@ -329,6 +342,29 @@
     if (CODEC_MIME[pref] && tv.includes(CODEC_MIME[pref])) return pref;
     for (const c of ['h264', 'vp8', 'vp9']) if (tv.includes(CODEC_MIME[c])) return c;
     return 'auto';
+  }
+
+  function sendAudioMethod() {
+    send({ type: 'audio-method', method: $('#optAudioMethod').value });
+  }
+
+  function showTvAudio(m) {
+    const lvl = (x) => (typeof x === 'number' ? x.toFixed(3) : 'n/a');
+    let text;
+    if (!m.tracks) {
+      text = 'TV sound: the Mac isn’t sending any sound. Stop casting and start again – when Chrome asks what to share, turn on “Also share tab audio” (for a tab) or “Also share system audio” (for the entire screen).';
+    } else if (!m.bytes) {
+      text = 'TV sound: the TV isn’t receiving any sound yet.';
+    } else {
+      const playing = m.path === 'webaudio'
+        ? `method A (output level ${lvl(m.webLevel)}, engine ${m.ctx})`
+        : m.path === 'element'
+          ? `method B (${m.videoMuted ? 'muted' : 'unmuted'}${m.videoPaused ? ', paused' : ''})`
+          : 'not playing yet';
+      text = `TV sound: receiving ✓${m.path === 'element' ? ` (level ${lvl(m.rtpLevel)})` : ''} · ${playing}` +
+        (m.prompt ? ' · waiting for a button press on the remote' : '');
+    }
+    $('#tvAudio').textContent = text;
   }
 
   function showTvInfo() {
@@ -517,6 +553,10 @@
     e.preventDefault();
     const url = $('#linkInput').value.trim();
     if (url) startLink(url);
+  });
+  $('#btnTone').addEventListener('click', () => {
+    $('#toneResult').textContent = 'Sending…';
+    send({ type: 'test-tone' });
   });
   $('#btnStop').addEventListener('click', () => endSession({ message: '' }));
   window.addEventListener('beforeunload', () => { if (session) send({ type: 'stop' }); });

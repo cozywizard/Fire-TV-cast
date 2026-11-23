@@ -120,3 +120,6 @@ select {
 .tv-info { margin: -10px 0 20px; color: var(--muted); font-size: 14px; }
 .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 26px; }
 .link-btn { background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 0; }
+
+.tv-sound { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.tv-sound p { margin: 0; flex-basis: 100%; }

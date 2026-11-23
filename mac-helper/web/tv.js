@@ -19,6 +19,13 @@
   var started = false;
   var audioCtx = null;   // unlocked by the Start button press
   var audioSrc = null;   // cast audio routed through audioCtx
+  var audioPath = 'none'; // 'webaudio' | 'element' | 'none'
+  var preferredPath = 'webaudio';
+  try { preferredPath = localStorage.getItem('ftvcast-audio') || 'webaudio'; } catch (e) {}
+  var analyser = null;
+  var silentTicks = 0;
+  var lastEnergy = null;
+  var diagTimer = null;
   var hostName = '';
 
   // ---------- Signaling ----------
@@ -71,6 +78,8 @@
         return;
       case 'play-url': return playUrl(msg.url);
       case 'control': return control(msg);
+      case 'test-tone': return testTone();
+      case 'audio-method': return setAudioMethod(msg.method);
       case 'replaced':
         // Another copy of this page took over; don't fight it.
         replaced = true;
@@ -240,11 +249,13 @@
     var p = video.play();
     if (p && p.catch) p.catch(function () {});
     routeStreamAudio();
+    if (!diagTimer) diagTimer = setInterval(audioDiag, 1000);
   }
 
   function routeStreamAudio() {
     var stream = video.srcObject;
     if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length) return;
+    if (preferredPath === 'element' || audioPath === 'element') { useElementAudio(); return; }
     if (!audioCtx) { showSoundPrompt(); return; }
     if (audioCtx.state !== 'running') {
       var r = audioCtx.resume && audioCtx.resume();
@@ -262,17 +273,125 @@
     try {
       audioSrc = audioCtx.createMediaStreamSource(stream);
       audioSrc.connect(audioCtx.destination);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      audioSrc.connect(analyser);
+      audioPath = 'webaudio';
       hideSoundPrompt();
     } catch (e) {
       console.warn('web audio routing failed, falling back to the video element', e);
-      video.muted = false;
-      var p = video.play();
-      if (p && p.catch) p.catch(function () { video.muted = true; video.play().catch(function () {}); showSoundPrompt(); });
+      useElementAudio();
     }
+  }
+
+  // Second way to play cast sound: straight from the <video> element.
+  function useElementAudio() {
+    disconnectAudio();
+    audioPath = 'element';
+    var failed = false;
+    var fail = function () {
+      if (failed || mode !== 'stream') return;
+      failed = true;
+      video.muted = true;
+      video.play().catch(function () {});
+      showSoundPrompt();
+    };
+    video.muted = false;
+    var p = video.play();
+    if (p && p.catch) p.catch(fail);
+    // Some browsers pause instead of rejecting when unmuting isn't allowed.
+    setTimeout(function () { if (video.paused || video.muted) fail(); else hideSoundPrompt(); }, 400);
   }
 
   function disconnectAudio() {
     if (audioSrc) { try { audioSrc.disconnect(); } catch (e) {} audioSrc = null; }
+    analyser = null;
+  }
+
+  function analyserLevel() {
+    if (!analyser) return null;
+    try {
+      var d = new Float32Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(d);
+      var m = 0;
+      for (var i = 0; i < d.length; i++) { var v = Math.abs(d[i]); if (v > m) m = v; }
+      return m;
+    } catch (e) { return null; }
+  }
+
+  // Every second: measure whether sound is arriving and whether it reaches the speakers,
+  // switch output method if Web Audio is silently dropping it, and report to the Mac.
+  function audioDiag() {
+    if (mode !== 'stream' || !pc) return;
+    var stream = video.srcObject;
+    var tracks = stream && stream.getAudioTracks ? stream.getAudioTracks() : [];
+    pc.getStats().then(function (report) {
+      var a = null;
+      report.forEach(function (st) {
+        if (st.type === 'inbound-rtp' && (st.kind === 'audio' || st.mediaType === 'audio')) a = st;
+      });
+      var rtpLevel = null;
+      if (a && typeof a.audioLevel === 'number') {
+        rtpLevel = a.audioLevel;
+      } else if (a && typeof a.totalAudioEnergy === 'number' && typeof a.totalSamplesDuration === 'number') {
+        if (lastEnergy && a.totalSamplesDuration > lastEnergy.d) {
+          rtpLevel = Math.sqrt((a.totalAudioEnergy - lastEnergy.e) / (a.totalSamplesDuration - lastEnergy.d));
+        }
+        lastEnergy = { e: a.totalAudioEnergy, d: a.totalSamplesDuration };
+      }
+      var webLevel = audioPath === 'webaudio' ? analyserLevel() : null;
+
+      if (audioPath === 'webaudio' && rtpLevel !== null && rtpLevel > 0.01 && webLevel !== null && webLevel < 0.001) silentTicks++;
+      else silentTicks = 0;
+      if (silentTicks >= 4) {
+        silentTicks = 0;
+        console.warn('sound arrives but Web Audio is silent; switching to the video element');
+        useElementAudio();
+      }
+
+      send({
+        type: 'tv-audio',
+        tracks: tracks.length,
+        trackState: tracks[0] ? tracks[0].readyState + (tracks[0].muted ? '/muted' : '') : 'none',
+        bytes: a ? a.bytesReceived || 0 : 0,
+        rtpLevel: rtpLevel,
+        path: audioPath,
+        webLevel: webLevel,
+        ctx: audioCtx ? audioCtx.state : 'none',
+        videoMuted: video.muted,
+        videoPaused: video.paused,
+        prompt: soundPromptVisible,
+        method: preferredPath
+      });
+    }).catch(function () {});
+  }
+
+  function setAudioMethod(method) {
+    method = method === 'element' ? 'element' : 'webaudio';
+    if (method === preferredPath) return;
+    preferredPath = method;
+    try { localStorage.setItem('ftvcast-audio', method); } catch (e) {}
+    if (mode !== 'stream') return;
+    disconnectAudio();
+    video.muted = true;
+    audioPath = 'none';
+    routeStreamAudio();
+  }
+
+  // "Play test tone on TV" from the Mac: proves whether this page can make sound at all.
+  function testTone() {
+    var result = { type: 'tv-tone', ctx: audioCtx ? audioCtx.state : 'none', webaudio: false, element: false };
+    try {
+      if (audioCtx && audioCtx.state === 'running') {
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = 523;
+        g.gain.value = 0.2;
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(); o.stop(audioCtx.currentTime + 0.8);
+        result.webaudio = true;
+      }
+    } catch (e) { result.error = String(e); }
+    send(result);
   }
 
   function ensureAudioCtx() {
@@ -301,7 +420,7 @@
     ensureAudioCtx();
     hideSoundPrompt();
     if (mode === 'stream') {
-      routeStreamAudio();
+      if (audioPath === 'element') useElementAudio(); else routeStreamAudio();
     } else if (mode === 'url') {
       video.muted = false;
       var p = video.play();
@@ -324,6 +443,11 @@
 
   function stopAll() {
     disconnectAudio();
+    audioPath = 'none';
+    silentTicks = 0;
+    lastEnergy = null;
+    clearInterval(diagTimer);
+    diagTimer = null;
     hideSoundPrompt();
     closePc();
     stopUrl();

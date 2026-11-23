@@ -122,6 +122,17 @@
     </div>
 
     <pre id="senderStats" class="stats"></pre>
+    <div class="tv-sound">
+      <p id="tvAudio" class="muted small">TV sound: checking…</p>
+      <label class="small muted">No sound? Try the other
+        <select id="optAudioMethod">
+          <option value="webaudio" selected>Sound method A</option>
+          <option value="element">Sound method B</option>
+        </select>
+      </label>
+      <button id="btnTone" class="link-btn">Play test tone on TV</button>
+      <span id="toneResult" class="muted small"></span>
+    </div>
   </section>
 
   <details class="help">
