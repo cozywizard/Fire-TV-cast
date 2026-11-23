@@ -43,10 +43,21 @@ const appSignature = "fire-tv-cast-helper"
 func main() {
 	noOpen := flag.Bool("no-open", false, "don't open the browser on start")
 	portFlag := flag.Int("port", 0, "port to listen on (default: 80, falling back to 8765+)")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	setupLogging()
 	log.Printf("Fire TV Cast helper %s starting", version)
+
+	// Install an update downloaded last time, then hand over to the new version.
+	if startupUpdate(*noOpen) {
+		log.Printf("launched the updated app; exiting")
+		return
+	}
 
 	ln, port, err := listen(*portFlag)
 	if err != nil {
@@ -60,7 +71,9 @@ func main() {
 		log.Fatalf("could not start server: %v", err)
 	}
 	srv := newServer(port)
+	srv.ln = ln
 	log.Printf("listening on port %d, LAN addresses %v", port, lanIPv4())
+	go backgroundUpdates()
 
 	if !*noOpen {
 		go func() {
@@ -117,6 +130,7 @@ func portSuffix(p int) string { return strings.TrimPrefix(portColon(p), ":") }
 // ---------- HTTP ----------
 
 type server struct {
+	ln    net.Listener
 	port  int
 	hub   *hub
 	files http.Handler
@@ -153,7 +167,23 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"port":        s.port,
 			"tvConnected": s.hub.hasReceiver(),
 			"hostname":    hostname(),
+			"update":      upd.snapshot(),
 		})
+		return
+	case "/api/update/check":
+		if !local || r.Method != http.MethodPost {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		go upd.checkAndDownload()
+		io.WriteString(w, "ok")
+		return
+	case "/api/update/apply":
+		if !local || r.Method != http.MethodPost {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		s.applyUpdateNow(w)
 		return
 	case "/api/quit":
 		if !local || r.Method != http.MethodPost {
@@ -177,6 +207,48 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.files.ServeHTTP(w, r)
+}
+
+// applyUpdateNow installs the staged update and restarts into it. The open pages
+// notice the new version when they reconnect and reload themselves.
+func (s *server) applyUpdateNow(w http.ResponseWriter) {
+	if upd.snapshot()["status"] != "ready" {
+		http.Error(w, "No update is ready yet.", http.StatusConflict)
+		return
+	}
+	applied, err := applyStaged()
+	if err != nil || !applied {
+		msg := "The update files were missing; it will download again."
+		if err != nil {
+			msg = err.Error()
+		}
+		upd.set("error", "", "Couldn't install the update: "+msg)
+		http.Error(w, msg, http.StatusInternalServerError)
+		return
+	}
+	io.WriteString(w, "restarting")
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		hadPage := s.hub.hasSender()
+		s.ln.Close() // free the port for the new version
+		args := []string{}
+		if hadPage {
+			args = append(args, "-no-open") // the open page reloads itself
+		}
+		if err := relaunch(args...); err != nil {
+			log.Printf("relaunch failed: %v", err)
+		}
+		os.Exit(0)
+	}()
+}
+
+func (h *hub) hasSender() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.sender != nil
 }
 
 func serveEmbedded(w http.ResponseWriter, name string) {
@@ -304,7 +376,7 @@ func (h *hub) join(p *peer) {
 			old.close()
 		}
 		h.receiver = p
-		p.send(msg("hello", "senderConnected", h.sender != nil))
+		p.send(msg("hello", "senderConnected", h.sender != nil, "version", version))
 		if h.sender != nil {
 			h.sender.send(msg("receiver-ready", "device", p.device))
 		}
@@ -318,7 +390,7 @@ func (h *hub) join(p *peer) {
 		}
 	}
 	h.sender = p
-	p.send(msg("hello", "receiverReady", h.receiver != nil))
+	p.send(msg("hello", "receiverReady", h.receiver != nil, "version", version))
 	if h.receiver != nil {
 		if h.receiver.tvInfo != nil {
 			p.send(h.receiver.tvInfo)

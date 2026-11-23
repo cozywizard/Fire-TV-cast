@@ -58,6 +58,21 @@ You need **Google Chrome** on the Mac. Safari can't share sound or play video fi
 That's the TV's browser reporting what it supports. If it says **WebRTC ✗**, the TV's browser
 can't receive live video. Mirroring and video files won't work on that TV, but *Play a link* might.
 
+## Updates
+
+Fire TV Cast updates itself. While it's running, it checks for a new version every few hours
+and downloads it in the background. The update installs the next time you open the app.
+To install it right away, click **Restart to update now** at the bottom of the page.
+The TV page reloads by itself afterwards. Press the middle button on the remote once to carry on.
+
+Automatic updates need two things:
+- **The app must be in your Applications folder.** If you run it from Downloads, it can't update.
+- **The GitHub repository must be public.** GitHub doesn't let the app download files from a
+  private repository without a login.
+
+If macOS says Fire TV Cast was prevented from modifying apps, go to **System Settings →
+Privacy & Security → App Management**, turn on **Fire TV Cast**, and click **Try again** on the page.
+
 ## Troubleshooting
 
 - **Silk can't open the address:** check that the Mac and the TV are on the **same Wi-Fi**.

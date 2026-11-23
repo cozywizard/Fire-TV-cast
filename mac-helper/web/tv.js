@@ -57,8 +57,17 @@
   }
   setInterval(function () { send({ type: 'ping' }); }, 15000);
 
+  var pageVersion = null;
+
   function handle(msg) {
     switch (msg.type) {
+      case 'hello':
+        // The helper on the Mac was updated: load the new version of this page.
+        if (msg.version) {
+          if (!pageVersion) pageVersion = msg.version;
+          else if (msg.version !== pageVersion) { location.reload(); return; }
+        }
+        return;
       case 'offer': return onOffer(msg);
       case 'candidate':
         if (pc && msg.candidate) {

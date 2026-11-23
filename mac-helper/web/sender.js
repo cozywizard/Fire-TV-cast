@@ -22,6 +22,7 @@
   let lastStats = null;
   let reconnectDelay = 1000;
   let tvCaps = null; // what the TV's browser reported it can do
+  let pageVersion = null; // helper version this page was loaded from
 
   // ---------- Settings ----------
 
@@ -98,6 +99,12 @@
   async function handle(msg) {
     switch (msg.type) {
       case 'hello':
+        // After an update the helper restarts with a new version: load the new page.
+        if (msg.version) {
+          if (!pageVersion) pageVersion = msg.version;
+          else if (msg.version !== pageVersion) { location.reload(); return; }
+        }
+        // falls through
       case 'receiver-ready':
         tvReady = msg.type === 'receiver-ready' || !!msg.receiverReady;
         updatePill();
@@ -597,8 +604,77 @@
         box.appendChild(el);
       });
       $('#helperVersion').textContent = 'Helper v' + info.version;
+      showUpdate(info.update);
     } catch (e) { /* helper not reachable; the pill says so */ }
   }
+  // ---------- Updates ----------
+
+  function showUpdate(u) {
+    const box = $('#updateBox');
+    if (!u || u.status === 'idle') { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    const text = $('#updateText');
+    const btn = $('#btnUpdate');
+    btn.classList.add('hidden');
+    box.classList.toggle('update-ready', u.status === 'ready');
+    switch (u.status) {
+      case 'ready':
+        text.textContent = `Update v${u.latest} is ready. It installs automatically next time you open Fire TV Cast.`;
+        btn.textContent = 'Restart to update now';
+        btn.dataset.action = 'apply';
+        btn.classList.remove('hidden');
+        break;
+      case 'downloading':
+        text.textContent = `Downloading update v${u.latest}…`;
+        break;
+      case 'checking':
+        text.textContent = 'Checking for updates…';
+        break;
+      case 'up-to-date':
+        text.textContent = 'Fire TV Cast is up to date.';
+        btn.textContent = 'Check now';
+        btn.dataset.action = 'check';
+        btn.classList.remove('hidden');
+        break;
+      case 'error':
+        text.textContent = u.message;
+        btn.textContent = 'Try again';
+        btn.dataset.action = 'check';
+        btn.classList.remove('hidden');
+        break;
+      case 'disabled':
+        text.textContent = u.message;
+        break;
+      default:
+        text.textContent = '';
+    }
+  }
+
+  async function refreshUpdate() {
+    try { showUpdate((await (await fetch('/api/info', { cache: 'no-store' })).json()).update); } catch {}
+  }
+
+  $('#btnUpdate').addEventListener('click', async () => {
+    const btn = $('#btnUpdate');
+    if (btn.dataset.action === 'check') {
+      await fetch('/api/update/check', { method: 'POST' }).catch(() => {});
+      $('#updateText').textContent = 'Checking for updates…';
+      btn.classList.add('hidden');
+      setTimeout(refreshUpdate, 2500);
+      setTimeout(refreshUpdate, 8000);
+      return;
+    }
+    if (session && !confirm('Updating restarts Fire TV Cast and stops the current cast. Continue?')) return;
+    btn.classList.add('hidden');
+    $('#updateText').textContent = 'Installing the update and restarting… this page will reload in a few seconds.';
+    try {
+      const r = await fetch('/api/update/apply', { method: 'POST' });
+      if (!r.ok) { $('#updateText').textContent = await r.text(); return; }
+    } catch { /* the helper is restarting */ }
+    if (session) endSession({ notifyTv: true, quiet: true });
+    // The reconnect loop sees the new version and reloads the page.
+  });
+
   $('#btnQuit').addEventListener('click', async () => {
     if (session) endSession({ message: '' });
     wsReplaced = true; // stop reconnecting
@@ -611,5 +687,6 @@
   checkSupport();
   loadInfo();
   setInterval(() => { if (!tvReady) loadInfo(); }, 10000);
+  setInterval(refreshUpdate, 60000);
   connect();
 })();
